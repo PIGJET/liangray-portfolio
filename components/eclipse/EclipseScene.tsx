@@ -75,7 +75,7 @@ void main(){
 
  // A few dim strands cross the dark interior instead of being cut off at the rim.
  float inside=1.-outer;
- float innerWarp=p.y+.045*sin(p.x*12.-wind*2.4)+.02*sin(p.x*29.-wind*4.));
+ float innerWarp=p.y+.045*sin(p.x*12.-wind*2.4)+.02*sin(p.x*29.-wind*4.);
  float innerA=pow(.5+.5*cos(innerWarp*82.+p.x*13.-wind*3.2),30.);
  float innerB=pow(.5+.5*cos((innerWarp+.055)*105.-p.x*9.+wind*2.6),38.);
  float innerEnvelope=(1.-smoothstep(R*.12,R*.99,r))*(.38+.62*exp(-abs(p.y)*5.));
