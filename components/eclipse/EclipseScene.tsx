@@ -27,7 +27,8 @@ void main(){
  float inv=R*R/r2;
  float potential=p.x*(1.+inv);
  float stream=p.y*(1.-inv);
- vec2 field=vec2(potential*3.05,stream*7.8);
+ float wind=time*1.65;
+ vec2 field=vec2(potential*3.05-wind,stream*7.8);
  field.y+=(fbm(vec2(p.x*1.55,p.y*4.2-time))-.5)*.47;
  float rot=(fbm(vec2(angle*1.3,time*.18))-.5)*.12+uPointer.x*.035;
  field=mat2(cos(rot),-sin(rot),sin(rot),cos(rot))*field;
@@ -35,7 +36,7 @@ void main(){
  vec2 z=field;vec3 energy=vec3(0.);float fog=0.;float sparks=0.;
  for(int i=1;i<13;i++){
    float fi=float(i);
-   vec2 phase=vec2(fi*1.618,-fi*1.173)+time*vec2(.72+fi*.035,-.54-fi*.028);
+   vec2 phase=vec2(fi*1.618-wind,-fi*1.173)+time*vec2(1.08+fi*.035,-.16-fi*.014);
    vec2 fold=sin(z.yx*vec2(1.11,1.27)+phase)+.46*sin(z*vec2(.63,.77)-phase.yx*.7);
    z+=fold*(.82/fi)+vec2(.024,-.017);
 
@@ -51,17 +52,18 @@ void main(){
  }
 
  // Closely spaced contour lines turn the field into individual energy strands.
- float strandPhase=stream*168.+sin(potential*8.4-time*2.1)*2.4+sin(angle*7.-time)*1.15;
+ float strandPhase=stream*168.+sin(potential*8.4-wind*2.8)*2.4+sin(angle*7.-time)*1.15;
+ strandPhase+=potential*13.5-wind*3.2;
  strandPhase+=(fbm(vec2(potential*4.2,stream*18.)+time*.16)-.5)*8.5;
  float strandsA=pow(.5+.5*cos(strandPhase),22.);
  float strandsB=pow(.5+.5*cos(strandPhase*.517+z.x*2.7+4.2),28.);
  float hairlines=pow(.5+.5*cos(strandPhase*1.83-z.y*1.4),42.);
  float strandBody=(strandsA*.58+strandsB*.34+hairlines*.28);
- float strandFlicker=.68+.32*sin(potential*10.-time*3.+fbm(field)*5.);
+ float strandFlicker=.68+.32*sin(potential*10.-wind*4.2+fbm(field)*5.);
  strandBody*=strandFlicker;
 
  // Multi-scale body: broad mist, structured plasma, hairline detail, hot knots.
- float horizontal=exp(-abs(stream)*2.5)*(1.-smoothstep(.8,1.35,abs(p.x))*.52);
+ float horizontal=exp(-abs(stream)*4.35);
  float outer=smoothstep(R-.004,R+.004,r);
  float turbulence=fbm(field*.58+vec2(time,-time*.4));
  vec3 mist=palette(.12+.2*turbulence)*fog*.009;
@@ -73,12 +75,12 @@ void main(){
 
  // A few dim strands cross the dark interior instead of being cut off at the rim.
  float inside=1.-outer;
- float innerWarp=p.y+.045*sin(p.x*12.-time*1.7)+.02*sin(p.x*29.+time);
- float innerA=pow(.5+.5*cos(innerWarp*82.+p.x*9.+time),30.);
- float innerB=pow(.5+.5*cos((innerWarp+.055)*105.-p.x*6.-time*.6),38.);
- float innerEnvelope=(1.-smoothstep(R*.24,R*.98,r))*(.28+.72*exp(-abs(p.y)*3.8));
+ float innerWarp=p.y+.045*sin(p.x*12.-wind*2.4)+.02*sin(p.x*29.-wind*4.));
+ float innerA=pow(.5+.5*cos(innerWarp*82.+p.x*13.-wind*3.2),30.);
+ float innerB=pow(.5+.5*cos((innerWarp+.055)*105.-p.x*9.+wind*2.6),38.);
+ float innerEnvelope=(1.-smoothstep(R*.12,R*.99,r))*(.38+.62*exp(-abs(p.y)*5.));
  vec3 interiorStrands=mix(vec3(.025,.12,.54),vec3(.42,.06,.48),.5+.5*sin(p.x*8.+time))*
-   (innerA*.7+innerB*.38)*innerEnvelope*inside*.24;
+   (innerA*.78+innerB*.46)*innerEnvelope*inside*.42;
  vec3 cloud=outsideCloud+strandLight+interiorStrands;
 
  // Independent chromatic fringes create optical depth without textures.
@@ -94,7 +96,7 @@ void main(){
  vec3 col=vec3(.0018,.0022,.006)+cloud*reveal;
  col=1.-exp(-col*1.24); // filmic/exponential light compression
  float core=1.-smoothstep(R-.0015,R+.001,r);
- col=mix(col,vec3(.0005,.0006,.0018)+interiorStrands*reveal*.72,core);
+ col=mix(col,vec3(.0005,.0006,.0018)+interiorStrands*reveal*.96,core);
  float vignette=1.-.48*pow(length((vUv-.5)*vec2(1.05,.72)),2.);
  col*=vignette;
  col+=(hash21(gl_FragCoord.xy+floor(uTime*9.))-.5)*.006;
