@@ -9,14 +9,19 @@ attribute float aSize;
 attribute float aBrightness;
 attribute vec3 aColor;
 uniform vec2 uParallax;
+uniform vec2 uPointer;
 uniform float uPixelRatio;
+uniform float uInteractive;
 varying float vBrightness;
 varying vec3 vColor;
+varying float vReveal;
 void main() {
   vec3 p = position;
   p.xy += uParallax * p.z * .028;
+  float pointerDistance = distance(p.xy, uPointer);
+  vReveal = mix(1., 1. - smoothstep(.08, .34, pointerDistance), uInteractive);
   gl_Position = vec4(p.xy, 0., 1.);
-  gl_PointSize = aSize * uPixelRatio * (1. + p.z * .2);
+  gl_PointSize = aSize * uPixelRatio * (1.45 + p.z * .2 - vReveal * .25);
   vBrightness = aBrightness;
   vColor = aColor;
 }`;
@@ -26,22 +31,25 @@ precision highp float;
 uniform float uOpacity;
 varying float vBrightness;
 varying vec3 vColor;
+varying float vReveal;
 void main() {
   float d = length(gl_PointCoord - .5);
-  float core = 1. - smoothstep(.045, .2, d);
-  float glow = (1. - smoothstep(.12, .5, d)) * .32;
-  float alpha = (core + glow) * vBrightness * uOpacity;
+  float core = 1. - smoothstep(.035, mix(.28, .16, vReveal), d);
+  float glow = (1. - smoothstep(.1, .5, d)) * mix(.62, .2, vReveal);
+  float alpha = (core * mix(.22, 1., vReveal) + glow) * vBrightness * uOpacity;
   if (alpha < .01) discard;
   gl_FragColor = vec4(vColor, alpha);
 }`;
 
-function material(opacity: number, pixelRatio: number, parallax: THREE.Vector2) {
+function material(opacity: number, pixelRatio: number, parallax: THREE.Vector2, pointer: THREE.Vector2, interactive = true) {
   return new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader,
     uniforms: {
       uParallax: { value: parallax },
+      uPointer: { value: pointer },
       uPixelRatio: { value: pixelRatio },
+      uInteractive: { value: interactive ? 1 : 0 },
       uOpacity: { value: opacity },
     },
     transparent: true,
@@ -68,9 +76,9 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
 
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const mobile = innerWidth < 720;
-    const nameCount = mobile ? 12000 : 30000;
-    const flowCount = mobile ? 10000 : 28000;
-    const ringCount = mobile ? 2200 : 6200;
+    const nameCount = mobile ? 14000 : 34000;
+    const flowCount = mobile ? 16000 : 44000;
+    const streamCount = mobile ? 5000 : 14000;
     let aspect = Math.max(1, el.clientWidth / el.clientHeight);
     const pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 1.35);
 
@@ -83,6 +91,9 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     const scene = new THREE.Scene();
     const camera = new THREE.Camera();
     const parallax = new THREE.Vector2();
+    const pointerTarget = new THREE.Vector2(4, 4);
+    const pointer = new THREE.Vector2(4, 4);
+    const neutral = new THREE.Vector2();
     const disposables: Array<THREE.BufferGeometry | THREE.Material> = [];
 
     // Horizontal wind field. Particles share narrow lanes but move independently.
@@ -91,6 +102,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     const flowLane = new Float32Array(flowCount);
     const flowSpeed = new Float32Array(flowCount);
     const flowPhase = new Float32Array(flowCount);
+    const flowDirection = new Int8Array(flowCount);
     const flowCapture = new Uint8Array(flowCount);
     const flowBrightness = new Float32Array(flowCount);
     const flowSize = new Float32Array(flowCount);
@@ -103,6 +115,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       flowLane[i] = bell;
       flowSpeed[i] = .00115 + Math.random() * .0024;
       flowPhase[i] = Math.random() * Math.PI * 2;
+      flowDirection[i] = Math.random() < .68 ? 1 : -1;
       flowCapture[i] = Math.random() < .16 ? 1 : 0;
       flowBrightness[i] = .16 + Math.random() * .62;
       flowSize[i] = .5 + Math.random() * 1.55;
@@ -115,7 +128,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     flowGeometry.setAttribute('aColor', new THREE.BufferAttribute(colorAttributes(flowCount, [
       [.42, .63, 1], [.58, .43, .92], [.56, .78, 1], [.78, .82, .94],
     ]), 3));
-    const flowMaterial = material(.58, pixelRatio, parallax);
+    const flowMaterial = material(.46, pixelRatio, parallax, pointer);
     const flowPoints = new THREE.Points(flowGeometry, flowMaterial);
     flowPoints.renderOrder = 0;
     scene.add(flowPoints);
@@ -129,33 +142,40 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     scene.add(hole);
     disposables.push(holeGeometry, holeMaterial);
 
-    // Thousands of points form the moving accretion edge; it is particles, never a ray.
-    const ringPosition = new Float32Array(ringCount * 3);
-    const ringAngle = new Float32Array(ringCount);
-    const ringRadius = new Float32Array(ringCount);
-    const ringSpeed = new Float32Array(ringCount);
-    const ringBrightness = new Float32Array(ringCount);
-    const ringSize = new Float32Array(ringCount);
-    for (let i = 0; i < ringCount; i++) {
-      ringAngle[i] = Math.random() * Math.PI * 2;
-      ringRadius[i] = .285 + Math.pow(Math.random(), 2.2) * .135;
-      ringSpeed[i] = .00022 + Math.random() * .0005;
-      ringBrightness[i] = .24 + Math.random() * .76;
-      ringSize[i] = .55 + Math.random() * 1.95;
+    // This accretion stream has a finite lifetime: every point enters, crosses the
+    // vortex, exits, and is replaced by a fresh particle from either screen edge.
+    const streamPosition = new Float32Array(streamCount * 3);
+    const streamProgress = new Float32Array(streamCount);
+    const streamSpeed = new Float32Array(streamCount);
+    const streamLane = new Float32Array(streamCount);
+    const streamPhase = new Float32Array(streamCount);
+    const streamDirection = new Int8Array(streamCount);
+    const streamFalls = new Uint8Array(streamCount);
+    const streamBrightness = new Float32Array(streamCount);
+    const streamSize = new Float32Array(streamCount);
+    for (let i = 0; i < streamCount; i++) {
+      streamProgress[i] = Math.random();
+      streamSpeed[i] = .00012 + Math.random() * .00025;
+      streamLane[i] = (Math.random() + Math.random() - 1) * .28;
+      streamPhase[i] = Math.random() * Math.PI * 2;
+      streamDirection[i] = Math.random() < .5 ? 1 : -1;
+      streamFalls[i] = Math.random() < .38 ? 1 : 0;
+      streamBrightness[i] = .22 + Math.random() * .72;
+      streamSize[i] = .6 + Math.random() * 1.8;
     }
-    const ringGeometry = new THREE.BufferGeometry();
-    const ringPositionAttr = new THREE.BufferAttribute(ringPosition, 3).setUsage(THREE.DynamicDrawUsage);
-    ringGeometry.setAttribute('position', ringPositionAttr);
-    ringGeometry.setAttribute('aSize', new THREE.BufferAttribute(ringSize, 1));
-    ringGeometry.setAttribute('aBrightness', new THREE.BufferAttribute(ringBrightness, 1));
-    ringGeometry.setAttribute('aColor', new THREE.BufferAttribute(colorAttributes(ringCount, [
+    const streamGeometry = new THREE.BufferGeometry();
+    const streamPositionAttr = new THREE.BufferAttribute(streamPosition, 3).setUsage(THREE.DynamicDrawUsage);
+    streamGeometry.setAttribute('position', streamPositionAttr);
+    streamGeometry.setAttribute('aSize', new THREE.BufferAttribute(streamSize, 1));
+    streamGeometry.setAttribute('aBrightness', new THREE.BufferAttribute(streamBrightness, 1));
+    streamGeometry.setAttribute('aColor', new THREE.BufferAttribute(colorAttributes(streamCount, [
       [.47, .76, 1], [.68, .48, 1], [.8, .88, 1], [.38, .56, .96],
     ]), 3));
-    const ringMaterial = material(.86, pixelRatio, parallax);
-    const ringPoints = new THREE.Points(ringGeometry, ringMaterial);
-    ringPoints.renderOrder = 2;
-    scene.add(ringPoints);
-    disposables.push(ringGeometry, ringMaterial);
+    const streamMaterial = material(.72, pixelRatio, parallax, pointer);
+    const streamPoints = new THREE.Points(streamGeometry, streamMaterial);
+    streamPoints.renderOrder = 2;
+    scene.add(streamPoints);
+    disposables.push(streamGeometry, streamMaterial);
 
     // The existing elastic particle typography remains the foreground layer.
     const target = generateParticleText(text, nameCount);
@@ -181,15 +201,12 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     nameGeometry.setAttribute('aSize', new THREE.BufferAttribute(target.sizes, 1));
     nameGeometry.setAttribute('aBrightness', new THREE.BufferAttribute(target.brightness, 1));
     nameGeometry.setAttribute('aColor', new THREE.BufferAttribute(colorAttributes(nameCount, [[.9, .93, .94], [.75, .83, .95], [1, 1, 1]]), 3));
-    const nameMaterial = material(.96, pixelRatio, parallax);
+    const nameMaterial = material(.96, pixelRatio, parallax, pointer, false);
     const namePoints = new THREE.Points(nameGeometry, nameMaterial);
     namePoints.renderOrder = 3;
     scene.add(namePoints);
     disposables.push(nameGeometry, nameMaterial);
 
-    const pointerTarget = new THREE.Vector2(4, 4);
-    const pointer = new THREE.Vector2(4, 4);
-    const neutral = new THREE.Vector2();
     let frame = 0;
     let last = performance.now();
     let visible = true;
@@ -220,9 +237,10 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
         let y = flowPosition[k + 1];
         let vx = flowVelocity[v];
         let vy = flowVelocity[v + 1];
-        x += flowSpeed[i] * dt;
-        if (x > 1.36) {
-          x = -1.36;
+        const direction = flowDirection[i];
+        x += flowSpeed[i] * direction * dt;
+        if ((direction > 0 && x > 1.36) || (direction < 0 && x < -1.36)) {
+          x = direction > 0 ? -1.36 : 1.36;
           y = flowLane[i];
           vx = 0;
           vy = 0;
@@ -234,9 +252,9 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
         let targetY = lane + wave;
 
         if (flowCapture[i] && Math.abs(x) < .52) {
-          const q = (x + .52) / 1.04;
+          const q = direction > 0 ? (x + .52) / 1.04 : (.52 - x) / 1.04;
           const radius = .035 + Math.abs(q - .5) * .64;
-          const angle = q * Math.PI * 5 + flowPhase[i];
+          const angle = direction * q * Math.PI * 5 + flowPhase[i];
           const targetX = Math.cos(angle) * radius / aspect;
           targetY = Math.sin(angle) * radius;
           vx += (targetX - x) * .055 * dt;
@@ -249,7 +267,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
           vy += (targetY - y) * .025 * dt;
         }
 
-        vx += (flowSpeed[i] - vx) * .012 * dt;
+        vx += (flowSpeed[i] * direction - vx) * .012 * dt;
         if (mouseActive) {
           const dx = (x - pointer.x) * aspect;
           const dy = y - pointer.y;
@@ -269,13 +287,33 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
         flowVelocity[v + 1] = vy;
       }
 
-      for (let i = 0; i < ringCount; i++) {
-        ringAngle[i] += ringSpeed[i] * dt * (1.2 - ringRadius[i]);
-        const breathe = Math.sin(time * .7 + i * .031) * .006;
-        const radius = ringRadius[i] + breathe;
+      for (let i = 0; i < streamCount; i++) {
+        let progress = streamProgress[i] + streamSpeed[i] * dt;
+        if (progress >= 1) {
+          progress -= 1;
+          streamDirection[i] = Math.random() < .5 ? 1 : -1;
+          streamLane[i] = (Math.random() + Math.random() - 1) * .28;
+          streamPhase[i] = Math.random() * Math.PI * 2;
+          streamFalls[i] = Math.random() < .38 ? 1 : 0;
+        }
+        streamProgress[i] = progress;
+        const direction = streamDirection[i];
+        const baseX = direction > 0 ? -1.38 + progress * 2.76 : 1.38 - progress * 2.76;
+        const lane = streamLane[i];
         const k = i * 3;
-        let x = Math.cos(ringAngle[i]) * radius / aspect;
-        let y = Math.sin(ringAngle[i]) * radius;
+        let x = baseX;
+        let y = lane + Math.sin(baseX * 6 + streamPhase[i] + time * .55) * .018;
+        const centerInfluence = Math.exp(-baseX * baseX * 7);
+        if (streamFalls[i] && Math.abs(baseX) < .5) {
+          const q = direction > 0 ? (baseX + .5) : (.5 - baseX);
+          const radius = .014 + Math.abs(q - .5) * .72;
+          const angle = streamPhase[i] + direction * q * Math.PI * 6;
+          x = Math.cos(angle) * radius / aspect;
+          y = Math.sin(angle) * radius;
+        } else if (Math.abs(lane) < .34) {
+          const side = lane === 0 ? (i & 1 ? 1 : -1) : Math.sign(lane);
+          y += side * (.36 - Math.abs(lane)) * centerInfluence;
+        }
         if (mouseActive) {
           const dx = (x - pointer.x) * aspect;
           const dy = y - pointer.y;
@@ -287,9 +325,9 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
             y += dy / d * push;
           }
         }
-        ringPosition[k] = x;
-        ringPosition[k + 1] = y;
-        ringPosition[k + 2] = (i % 17) / 17 * .5 - .25;
+        streamPosition[k] = x;
+        streamPosition[k + 1] = y;
+        streamPosition[k + 2] = (i % 23) / 23 * .6 - .3;
       }
 
       const active = enteredRef.current || reduced;
@@ -328,7 +366,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       }
 
       flowPositionAttr.needsUpdate = true;
-      ringPositionAttr.needsUpdate = true;
+      streamPositionAttr.needsUpdate = true;
       namePositionAttr.needsUpdate = true;
       if (visible) renderer.render(scene, camera);
       frame = requestAnimationFrame(render);
