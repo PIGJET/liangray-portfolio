@@ -11,12 +11,14 @@ attribute float aSpeed;
 attribute float aPhase;
 attribute float aDirection;
 attribute float aCapture;
-attribute vec3 aColor;
+attribute float aTone;
 uniform float uTime;
 uniform float uPixelRatio;
 uniform float uAspect;
 uniform vec2 uPointer;
 uniform vec2 uParallax;
+uniform vec3 uColorA;
+uniform vec3 uColorB;
 varying float vBrightness;
 varying float vReveal;
 varying vec3 vColor;
@@ -60,15 +62,17 @@ void main() {
   gl_Position = vec4(p, 0., 1.);
   gl_PointSize = aSize * uPixelRatio * mix(1.55, 1.08, vReveal);
   vBrightness = aBrightness;
-  vColor = aColor;
+  vColor = mix(uColorA, uColorB, aTone);
 }`;
 
 const nameVertexShader = `
 attribute float aSize;
 attribute float aBrightness;
-attribute vec3 aColor;
+attribute float aTone;
 uniform float uPixelRatio;
 uniform vec2 uParallax;
+uniform vec3 uColorA;
+uniform vec3 uColorB;
 varying float vBrightness;
 varying float vReveal;
 varying vec3 vColor;
@@ -79,7 +83,7 @@ void main() {
   gl_PointSize = aSize * uPixelRatio * (1. + p.z * .2);
   vBrightness = aBrightness;
   vReveal = 1.;
-  vColor = aColor;
+  vColor = mix(uColorA, uColorB, aTone);
 }`;
 
 const fragmentShader = `
@@ -98,16 +102,43 @@ void main() {
   gl_FragColor = vec4(vColor, alpha);
 }`;
 
-function palette(count: number, choices: number[][]) {
-  const colors = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) colors.set(choices[(Math.random() * choices.length) | 0], i * 3);
-  return colors;
+function tones(count: number) {
+  const values = new Float32Array(count);
+  for (let i = 0; i < count; i++) values[i] = Math.random();
+  return values;
 }
 
-export default function ParticleScene({ entered, text }: { entered: boolean; text: string }) {
+export type ParticlePalette = 'pearl' | 'ice' | 'violet' | 'aurora' | 'ember';
+
+const colorways: Record<ParticlePalette, { flow: [string, string]; name: [string, string] }> = {
+  pearl: { flow: ['#8c9396', '#f7fbff'], name: ['#cad0d2', '#ffffff'] },
+  ice: { flow: ['#296bff', '#b9f4ff'], name: ['#d8e5ff', '#ffffff'] },
+  violet: { flow: ['#6d35ff', '#f0a8ff'], name: ['#e4d5ff', '#fff7ff'] },
+  aurora: { flow: ['#16c7a4', '#77a8ff'], name: ['#c8fff1', '#eef5ff'] },
+  ember: { flow: ['#ff4f2b', '#ffd06b'], name: ['#ffe0bd', '#fffaf0'] },
+};
+
+type ColorUniforms = {
+  flowA: THREE.IUniform<THREE.Color>;
+  flowB: THREE.IUniform<THREE.Color>;
+  nameA: THREE.IUniform<THREE.Color>;
+  nameB: THREE.IUniform<THREE.Color>;
+};
+
+export default function ParticleScene({ entered, text, palette }: { entered: boolean; text: string; palette: ParticlePalette }) {
   const mount = useRef<HTMLDivElement>(null);
   const enteredRef = useRef(entered);
+  const colorsRef = useRef<ColorUniforms | null>(null);
   useEffect(() => { enteredRef.current = entered; }, [entered]);
+  useEffect(() => {
+    const uniforms = colorsRef.current;
+    if (!uniforms) return;
+    const colors = colorways[palette];
+    uniforms.flowA.value.set(colors.flow[0]);
+    uniforms.flowB.value.set(colors.flow[1]);
+    uniforms.nameA.value.set(colors.name[0]);
+    uniforms.nameB.value.set(colors.name[1]);
+  }, [palette]);
 
   useEffect(() => {
     const el = mount.current;
@@ -135,6 +166,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     const pointer = new THREE.Vector2(4, 4);
     const parallax = new THREE.Vector2();
     const neutral = new THREE.Vector2();
+    const initialColors = colorways[palette];
 
     // Static seeds are animated entirely in the vertex shader, allowing hundreds
     // of thousands of particles without a per-particle JavaScript update.
@@ -165,12 +197,11 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     flowGeometry.setAttribute('aPhase', new THREE.BufferAttribute(flowPhase, 1));
     flowGeometry.setAttribute('aDirection', new THREE.BufferAttribute(flowDirection, 1));
     flowGeometry.setAttribute('aCapture', new THREE.BufferAttribute(flowCapture, 1));
-    flowGeometry.setAttribute('aColor', new THREE.BufferAttribute(palette(flowCount, [
-      [.38, .59, .98], [.53, .4, .88], [.48, .72, 1], [.72, .77, .94], [.31, .49, .83],
-    ]), 3));
+    flowGeometry.setAttribute('aTone', new THREE.BufferAttribute(tones(flowCount), 1));
     const flowUniforms = {
       uTime: { value: 0 }, uPixelRatio: { value: pixelRatio }, uAspect: { value: aspect },
       uPointer: { value: pointer }, uParallax: { value: parallax }, uOpacity: { value: .43 }, uSoftField: { value: 1 },
+      uColorA: { value: new THREE.Color(initialColors.flow[0]) }, uColorB: { value: new THREE.Color(initialColors.flow[1]) },
     };
     const flowMaterial = new THREE.ShaderMaterial({ vertexShader: flowVertexShader, fragmentShader, uniforms: flowUniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
     const flowPoints = new THREE.Points(flowGeometry, flowMaterial);
@@ -201,15 +232,18 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     nameGeometry.setAttribute('position', namePositionAttr);
     nameGeometry.setAttribute('aSize', new THREE.BufferAttribute(target.sizes, 1));
     nameGeometry.setAttribute('aBrightness', new THREE.BufferAttribute(target.brightness, 1));
-    nameGeometry.setAttribute('aColor', new THREE.BufferAttribute(palette(nameCount, [[.9, .93, .94], [.75, .83, .95], [1, 1, 1]]), 3));
+    nameGeometry.setAttribute('aTone', new THREE.BufferAttribute(tones(nameCount), 1));
+    const nameColorA = { value: new THREE.Color(initialColors.name[0]) };
+    const nameColorB = { value: new THREE.Color(initialColors.name[1]) };
     const nameMaterial = new THREE.ShaderMaterial({
       vertexShader: nameVertexShader, fragmentShader,
-      uniforms: { uPixelRatio: { value: pixelRatio }, uParallax: { value: parallax }, uOpacity: { value: .96 }, uSoftField: { value: .3 } },
+      uniforms: { uPixelRatio: { value: pixelRatio }, uParallax: { value: parallax }, uOpacity: { value: .96 }, uSoftField: { value: .3 }, uColorA: nameColorA, uColorB: nameColorB },
       transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     const namePoints = new THREE.Points(nameGeometry, nameMaterial);
     namePoints.renderOrder = 2;
     scene.add(namePoints);
+    colorsRef.current = { flowA: flowUniforms.uColorA, flowB: flowUniforms.uColorB, nameA: nameColorA, nameB: nameColorB };
 
     let frame = 0;
     let last = performance.now();
@@ -283,6 +317,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       removeEventListener('pointerleave', onLeave);
       removeEventListener('scroll', onScroll);
       flowGeometry.dispose(); flowMaterial.dispose(); holeGeometry.dispose(); holeMaterial.dispose(); nameGeometry.dispose(); nameMaterial.dispose();
+      colorsRef.current = null;
       renderer.dispose();
       el.removeChild(renderer.domElement);
     };

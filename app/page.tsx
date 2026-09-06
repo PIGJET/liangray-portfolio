@@ -1,13 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import ParticleScene from '@/components/particles/ParticleScene';
+import ParticleScene, { type ParticlePalette } from '@/components/particles/ParticleScene';
+
+const palettes: Array<{ id: ParticlePalette; label: string }> = [
+  { id: 'pearl', label: 'Pearl' },
+  { id: 'ice', label: 'Ice' },
+  { id: 'violet', label: 'Violet' },
+  { id: 'aurora', label: 'Aurora' },
+  { id: 'ember', label: 'Ember' },
+];
 
 export default function Home() {
   const [entered, setEntered] = useState(false);
+  const [palette, setPalette] = useState<ParticlePalette>('pearl');
   return <main><section className={`hero ${entered ? 'is-entered' : ''}`} id="home">
-    <ParticleScene entered={entered} text="LIANGRAY LI" />
+    <ParticleScene entered={entered} text="LIANGRAY LI" palette={palette} />
     <header className="site-header"><a className="monogram" href="#home" aria-label="Liangray Li, home">LL</a><nav aria-label="Primary navigation"><a href="#projects">Projects</a><a href="#about">About</a><a href="#contact">Contact</a></nav></header>
+    <div className="palette-picker" aria-label="Particle color"><span>Color</span><div>{palettes.map((option) => <button key={option.id} type="button" className={palette === option.id ? 'is-active' : ''} data-palette={option.id} onClick={() => setPalette(option.id)} aria-label={`${option.label} particles`} aria-pressed={palette === option.id}><i /><b>{option.label}</b></button>)}</div></div>
     <div className="identity"><p className="eyebrow">Creative developer · Toronto</p><h1>Liangray Li</h1><p className="descriptor">I shape quiet, immersive digital experiences.</p></div>
     <button className="enter-button" onClick={() => setEntered(true)} aria-label="Enter portfolio"><span>Enter</span><span aria-hidden="true">↗</span></button>
     <a className="scroll-cue" href="#projects" aria-label="Scroll to selected projects"><span>Scroll</span><i /></a>
