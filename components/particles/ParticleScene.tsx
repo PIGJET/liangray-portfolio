@@ -108,11 +108,14 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     const flowSize = new Float32Array(flowCount);
     for (let i = 0; i < flowCount; i++) {
       const k = i * 3;
-      const bell = (Math.random() + Math.random() + Math.random() + Math.random() - 2) * .32;
-      flowPosition[k] = Math.random() * 2.7 - 1.35;
-      flowPosition[k + 1] = bell;
+      const lane = (Math.random() + Math.random() + Math.random() + Math.random() - 2) * .5;
+      const x = Math.random() * 2.7 - 1.35;
+      const progress = (x + 1.35) / 2.7;
+      const beamWidth = .026 + Math.pow(Math.sin(Math.PI * progress), 1.15) * .54;
+      flowPosition[k] = x;
+      flowPosition[k + 1] = lane * beamWidth;
       flowPosition[k + 2] = Math.random() * .9 - .45;
-      flowLane[i] = bell;
+      flowLane[i] = lane;
       flowSpeed[i] = .00115 + Math.random() * .0024;
       flowPhase[i] = Math.random() * Math.PI * 2;
       flowDirection[i] = Math.random() < .68 ? 1 : -1;
@@ -241,15 +244,17 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
         x += flowSpeed[i] * direction * dt;
         if ((direction > 0 && x > 1.36) || (direction < 0 && x < -1.36)) {
           x = direction > 0 ? -1.36 : 1.36;
-          y = flowLane[i];
+          y = flowLane[i] * .026;
           vx = 0;
           vy = 0;
         }
 
         const lane = flowLane[i];
-        const wave = Math.sin(x * 5.2 + flowPhase[i] + time * .38) * (.014 + Math.abs(lane) * .028);
+        const travel = direction > 0 ? (x + 1.36) / 2.72 : (1.36 - x) / 2.72;
+        const beamWidth = .026 + Math.pow(Math.sin(Math.PI * Math.max(0, Math.min(1, travel))), 1.15) * .54;
+        const wave = Math.sin(x * 5.2 + flowPhase[i] + time * .38) * (.006 + beamWidth * .035);
         const influence = Math.exp(-x * x * 5.5);
-        let targetY = lane + wave;
+        let targetY = lane * beamWidth + wave;
 
         if (flowCapture[i] && Math.abs(x) < .52) {
           const q = direction > 0 ? (x + .52) / 1.04 : (.52 - x) / 1.04;
@@ -259,9 +264,9 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
           targetY = Math.sin(angle) * radius;
           vx += (targetX - x) * .055 * dt;
           vy += (targetY - y) * .055 * dt;
-        } else if (Math.abs(lane) < .36) {
-          const side = lane === 0 ? (i & 1 ? 1 : -1) : Math.sign(lane);
-          targetY += side * (.37 - Math.abs(lane)) * influence * .9;
+        } else if (Math.abs(targetY) < .36) {
+          const side = targetY === 0 ? (i & 1 ? 1 : -1) : Math.sign(targetY);
+          targetY += side * (.37 - Math.abs(targetY)) * influence * .9;
           vy += (targetY - y) * .038 * dt;
         } else {
           vy += (targetY - y) * .025 * dt;
@@ -300,9 +305,10 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
         const direction = streamDirection[i];
         const baseX = direction > 0 ? -1.38 + progress * 2.76 : 1.38 - progress * 2.76;
         const lane = streamLane[i];
+        const beamWidth = .018 + Math.pow(Math.sin(Math.PI * progress), 1.2) * .34;
         const k = i * 3;
         let x = baseX;
-        let y = lane + Math.sin(baseX * 6 + streamPhase[i] + time * .55) * .018;
+        let y = lane * beamWidth + Math.sin(baseX * 6 + streamPhase[i] + time * .55) * (.004 + beamWidth * .035);
         const centerInfluence = Math.exp(-baseX * baseX * 7);
         if (streamFalls[i] && Math.abs(baseX) < .5) {
           const q = direction > 0 ? (baseX + .5) : (.5 - baseX);
@@ -310,9 +316,9 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
           const angle = streamPhase[i] + direction * q * Math.PI * 6;
           x = Math.cos(angle) * radius / aspect;
           y = Math.sin(angle) * radius;
-        } else if (Math.abs(lane) < .34) {
-          const side = lane === 0 ? (i & 1 ? 1 : -1) : Math.sign(lane);
-          y += side * (.36 - Math.abs(lane)) * centerInfluence;
+        } else if (Math.abs(y) < .34) {
+          const side = y === 0 ? (i & 1 ? 1 : -1) : Math.sign(y);
+          y += side * (.36 - Math.abs(y)) * centerInfluence;
         }
         if (mouseActive) {
           const dx = (x - pointer.x) * aspect;
