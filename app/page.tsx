@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import EclipseScene from '@/components/eclipse/EclipseScene';
+import ParticleScene from '@/components/particles/ParticleScene';
 
 export default function Home() {
   const [entered, setEntered] = useState(false);
   return <main><section className={`hero ${entered ? 'is-entered' : ''}`} id="home">
-    <EclipseScene entered={entered} />
+    <ParticleScene entered={entered} text="LIANGRAY LI" />
     <header className="site-header"><a className="monogram" href="#home" aria-label="Liangray Li, home">LL</a><nav aria-label="Primary navigation"><a href="#projects">Projects</a><a href="#about">About</a><a href="#contact">Contact</a></nav></header>
     <div className="identity"><p className="eyebrow">Creative developer · Toronto</p><h1>Liangray Li</h1><p className="descriptor">I shape quiet, immersive digital experiences.</p></div>
     <button className="enter-button" onClick={() => setEntered(true)} aria-label="Enter portfolio"><span>Enter</span><span aria-hidden="true">↗</span></button>
