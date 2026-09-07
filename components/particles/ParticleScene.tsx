@@ -19,7 +19,6 @@ uniform vec2 uPointer;
 uniform vec2 uParallax;
 uniform vec3 uColorA;
 uniform vec3 uColorB;
-uniform vec3 uAccent;
 uniform float uIntro;
 varying float vBrightness;
 varying float vReveal;
@@ -39,17 +38,21 @@ void main() {
   float filament = sin(baseX * 8.7 - uTime * .31 + aPhase * .43) * .026;
   float turbulence = sin(baseX * 17. + uTime * .47 + aPhase * 1.7) * .009;
   float magneticPocket = sin(baseX * 5.2 + uTime * .23) * sin(aPhase * 2.3 - uTime * .11) * .035;
-  float y = position.y * envelope + (slowDrift + filament + turbulence + magneticPocket) * envelope;
+  float bandY = position.y * envelope + (slowDrift + filament + turbulence + magneticPocket) * envelope;
+  float fieldY = position.y * 1.04 + slowDrift * 1.8 + filament * .55 + turbulence;
+  float gravity = smoothstep(.54, .96, aCapture);
+  float y = mix(fieldY, bandY, gravity * .86);
   float x = baseX + sin(position.y * 9. + aPhase + uTime * .13) * .009;
 
   float center = exp(-baseX * baseX * 7.);
+  y *= 1. - center * gravity * .28;
   float side = mix(-1., 1., step(0., position.y + sin(aPhase) * .08));
-  float deflect = step(aCapture, .63);
+  float deflect = step(.72, aCapture);
   float orbitEdge = .35 * (1. + sin(aPhase * 3.7 + uTime * .08) * .05);
-  y += side * (orbitEdge - min(orbitEdge, abs(y))) * center * deflect;
+  y += side * (orbitEdge - min(orbitEdge, abs(y))) * center * deflect * .72;
 
-  // A changing subset is weakly captured, spirals inward, and later exits.
-  if (aCapture > .63 && abs(baseX) < .52) {
+  // Only the most gravity-responsive particles are briefly captured.
+  if (aCapture > .84 && abs(baseX) < .52) {
     float q = mix(.52 - baseX, baseX + .52, step(0., aDirection));
     float radius = .012 + abs(q - .52) * .69;
     float angle = aPhase + aDirection * q * 18.4 + sin(uTime * .16 + aPhase) * .35;
@@ -68,12 +71,12 @@ void main() {
   gl_Position = vec4(p, 0., 1.);
   gl_PointSize = aSize * uPixelRatio * mix(2.05, .9, depth) * mix(1.42, 1.02, vReveal);
   float rareHighlight = smoothstep(.965, .998, aTone);
-  vBrightness = aBrightness * mix(.2, 1., depth) * (1. + rareHighlight * 1.7) * mix(.32, 1., uIntro) * (.9 + .1 * exp(-abs(position.y) * .8));
-  float icyLensing = center * (.2 + .8 * step(.63, aCapture)) * (.35 + .65 * depth);
-  vColor = mix(mix(uColorA, uColorB, aTone), uAccent, icyLensing * .72);
+  float fieldSoftness = mix(.48, 1., gravity);
+  vBrightness = aBrightness * mix(.2, 1., depth) * (1. + rareHighlight * 1.45) * mix(.32, 1., uIntro) * fieldSoftness;
+  vColor = mix(uColorA, uColorB, aTone);
   float radial = length(vec2(p.x * uAspect, p.y));
   float inside = 1. - step(.255, radial);
-  float capturedVisibility = step(.63, aCapture) * (.18 + .82 * smoothstep(.012, .255, radial));
+  float capturedVisibility = step(.84, aCapture) * (.18 + .82 * smoothstep(.012, .255, radial));
   vVisibility = mix(1., capturedVisibility, inside);
 }`;
 
@@ -115,30 +118,6 @@ void main() {
   float alpha = (core * mix(.16, 1., vReveal) + haze * uSoftField) * vBrightness * uOpacity * vVisibility;
   if (alpha < .008) discard;
   gl_FragColor = vec4(vColor, alpha);
-}`;
-
-const photonVertexShader = `
-varying vec2 vLocal;
-void main() {
-  vLocal = position.xy;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
-}`;
-
-const photonFragmentShader = `
-precision highp float;
-uniform float uTime;
-varying vec2 vLocal;
-void main() {
-  float radius = length(vLocal);
-  float angle = atan(vLocal.y, vLocal.x);
-  float fineEdge = exp(-pow((radius - .92) / .055, 2.));
-  float outerHaze = exp(-pow((radius - 1.01) / .14, 2.)) * .24;
-  float asymmetry = .28 + .72 * smoothstep(-.7, .9, sin(angle - .55 + sin(uTime * .08) * .13));
-  float texture = .78 + .22 * sin(angle * 5. - uTime * .17 + sin(angle * 2.) * 1.4);
-  float alpha = (fineEdge + outerHaze) * asymmetry * texture * .5;
-  vec3 pearl = vec3(.79, .84, .87);
-  vec3 ice = vec3(.38, .64, 1.);
-  gl_FragColor = vec4(mix(pearl, ice, asymmetry * .42), alpha);
 }`;
 
 function tones(count: number) {
@@ -215,7 +194,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       uTime: { value: 0 }, uPixelRatio: { value: pixelRatio }, uAspect: { value: aspect },
       uPointer: { value: pointer }, uParallax: { value: parallax }, uOpacity: { value: .4 }, uSoftField: { value: 1 },
       uColorA: { value: new THREE.Color('#747b80') }, uColorB: { value: new THREE.Color('#f2f7fa') },
-      uAccent: { value: new THREE.Color('#79aef8') }, uIntro: { value: reduced ? 1 : .32 },
+      uIntro: { value: reduced ? 1 : .32 },
     };
     const flowMaterial = new THREE.ShaderMaterial({ vertexShader: flowVertexShader, fragmentShader, uniforms: flowUniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
     const flowPoints = new THREE.Points(flowGeometry, flowMaterial);
@@ -227,13 +206,6 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     const hole = new THREE.Mesh(holeGeometry, holeMaterial);
     hole.renderOrder = 0;
     scene.add(hole);
-
-    const photonGeometry = new THREE.RingGeometry(.76, 1.2, 160, 1);
-    const photonUniforms = { uTime: { value: 0 } };
-    const photonMaterial = new THREE.ShaderMaterial({ vertexShader: photonVertexShader, fragmentShader: photonFragmentShader, uniforms: photonUniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
-    const photonRing = new THREE.Mesh(photonGeometry, photonMaterial);
-    photonRing.renderOrder = 2;
-    scene.add(photonRing);
 
     const target = generateParticleText(text, nameCount);
     const namePosition = new Float32Array(nameCount * 3);
@@ -274,7 +246,6 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       renderer.setSize(el.clientWidth, el.clientHeight, false);
       flowUniforms.uAspect.value = aspect;
       hole.scale.set(.255 / aspect, .255, 1);
-      photonRing.scale.set(.29 / aspect, .29, 1);
     };
     const onPointer = (event: PointerEvent) => pointerTarget.set(event.clientX / innerWidth * 2 - 1, -(event.clientY / innerHeight * 2 - 1));
     const onLeave = () => pointerTarget.set(4, 4);
@@ -286,7 +257,6 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       pointer.lerp(pointerTarget, .06);
       parallax.lerp(pointerTarget.length() < 2 ? pointer : neutral, .022);
       flowUniforms.uTime.value = reduced ? 0 : now * .001;
-      photonUniforms.uTime.value = reduced ? 0 : now * .001;
       intro += ((enteredRef.current ? 1 : .32) - intro) * .026 * dt;
       flowUniforms.uIntro.value = intro;
 
@@ -341,7 +311,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       removeEventListener('pointermove', onPointer);
       removeEventListener('pointerleave', onLeave);
       removeEventListener('scroll', onScroll);
-      flowGeometry.dispose(); flowMaterial.dispose(); holeGeometry.dispose(); holeMaterial.dispose(); photonGeometry.dispose(); photonMaterial.dispose(); nameGeometry.dispose(); nameMaterial.dispose();
+      flowGeometry.dispose(); flowMaterial.dispose(); holeGeometry.dispose(); holeMaterial.dispose(); nameGeometry.dispose(); nameMaterial.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
     };
