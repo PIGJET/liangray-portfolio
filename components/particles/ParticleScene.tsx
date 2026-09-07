@@ -25,11 +25,17 @@ uniform float uIntro;
 varying float vBrightness;
 varying float vReveal;
 varying float vVisibility;
+varying float vDepthBlur;
 varying vec3 vColor;
 
 void main() {
   float depth = position.z + .5;
-  float progress = fract(position.x + uTime * aSpeed * mix(.58, 1.25, depth));
+  float background = 1. - smoothstep(.27, .39, depth);
+  float foreground = smoothstep(.64, .76, depth);
+  float midground = 1. - background - foreground;
+  float layerSpeed = background * .62 + midground + foreground * 1.3;
+  float layerGravity = background * .62 + midground * 1.18 + foreground * .88;
+  float progress = fract(position.x + uTime * aSpeed * layerSpeed);
   float directed = mix(1. - progress, progress, step(0., aDirection));
   float baseX = mix(-1.42, 1.42, directed);
   float widthNoise = 1. + sin(aPhase * 2.7 + uTime * .08) * .025;
@@ -42,7 +48,7 @@ void main() {
   float magneticPocket = sin(baseX * 5.2 + uTime * .23) * sin(aPhase * 2.3 - uTime * .11) * .035;
   float bandY = position.y * envelope + (slowDrift + filament + turbulence + magneticPocket) * envelope;
   float fieldY = position.y * 1.04 + slowDrift * 1.8 + filament * .55 + turbulence;
-  float gravity = smoothstep(.49, .94, aCapture);
+  float gravity = clamp(smoothstep(.49, .94, aCapture) * layerGravity, 0., 1.);
   float y = mix(fieldY, bandY, gravity * .91);
   float x = baseX + sin(position.y * 9. + aPhase + uTime * .13) * .009;
 
@@ -68,16 +74,19 @@ void main() {
   if (aCapture > .84 && abs(baseX) < .52) {
     float q = mix(.52 - baseX, baseX + .52, step(0., aDirection));
     float radius = .012 + abs(q - .52) * .69;
-    float angle = aPhase + aDirection * q * 18.4 + sin(uTime * .16 + aPhase) * .35;
+    float orbitalDirection = mix(-aDirection, aDirection, step(.58, depth));
+    float orbitalSpeed = background * .72 + midground + foreground * 1.2;
+    float angle = aPhase + orbitalDirection * q * 18.4 + sin(uTime * .16 * orbitalSpeed + aPhase) * .35;
     x = cos(angle) * radius / uAspect;
     y = sin(angle) * radius;
   }
 
-  vec2 p = vec2(x, y) + uParallax * position.z * .025;
+  vec2 p = vec2(x, y) + uParallax * position.z * .038;
   vec2 delta = vec2((p.x - uPointer.x) * uAspect, p.y - uPointer.y);
   float pointerDistance = length(delta);
   vReveal = 1. - smoothstep(.075, .34, pointerDistance);
-  float push = pow(max(0., 1. - pointerDistance / .23), 2.) * .13;
+  float pointerDepth = background * .52 + midground + foreground * 1.24;
+  float push = pow(max(0., 1. - pointerDistance / .23), 2.) * .13 * pointerDepth;
   p += normalize(delta + .00001) * push * vec2(1. / uAspect, 1.);
   p += vec2(-delta.y / uAspect, delta.x) * push * .16;
 
@@ -85,7 +94,9 @@ void main() {
   gl_PointSize = aSize * uPixelRatio * mix(2.05, .9, depth) * mix(1.42, 1.02, vReveal);
   float rareHighlight = smoothstep(.965, .998, aTone);
   float fieldSoftness = mix(.48, 1., gravity);
-  vBrightness = aBrightness * mix(.2, 1., depth) * (1. + rareHighlight * 1.45) * mix(.32, 1., uIntro) * fieldSoftness * (1. + aFilament * .18);
+  float layerLight = background * .66 + midground * 1.08 + foreground;
+  vBrightness = aBrightness * mix(.2, 1., depth) * layerLight * (1. + rareHighlight * 1.45) * mix(.32, 1., uIntro) * fieldSoftness * (1. + aFilament * .18);
+  vDepthBlur = background * .72 + foreground * .18;
   vColor = mix(uColorA, uColorB, aTone);
   float radial = length(vec2(p.x * uAspect, p.y));
   float inside = 1. - step(.255, radial);
@@ -104,6 +115,7 @@ uniform vec3 uColorB;
 varying float vBrightness;
 varying float vReveal;
 varying float vVisibility;
+varying float vDepthBlur;
 varying vec3 vColor;
 void main() {
   vec3 p = position;
@@ -113,6 +125,7 @@ void main() {
   vBrightness = aBrightness;
   vReveal = 1.;
   vVisibility = 1.;
+  vDepthBlur = 0.;
   vColor = mix(uColorA, uColorB, aTone);
 }`;
 
@@ -123,11 +136,12 @@ uniform float uSoftField;
 varying float vBrightness;
 varying float vReveal;
 varying float vVisibility;
+varying float vDepthBlur;
 varying vec3 vColor;
 void main() {
   float d = length(gl_PointCoord - .5);
-  float core = 1. - smoothstep(.035, mix(.29, .15, vReveal), d);
-  float haze = (1. - smoothstep(.08, .5, d)) * mix(.66, .18, vReveal);
+  float core = 1. - smoothstep(.035 + vDepthBlur * .025, mix(.29, .15, vReveal) + vDepthBlur * .075, d);
+  float haze = (1. - smoothstep(.08, .5, d)) * mix(.66, .18, vReveal) * (1. + vDepthBlur * .42);
   float alpha = (core * mix(.16, 1., vReveal) + haze * uSoftField) * vBrightness * uOpacity * vVisibility;
   if (alpha < .008) discard;
   gl_FragColor = vec4(vColor, alpha);
