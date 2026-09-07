@@ -193,7 +193,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     const flowUniforms = {
       uTime: { value: 0 }, uPixelRatio: { value: pixelRatio }, uAspect: { value: aspect },
       uPointer: { value: pointer }, uParallax: { value: parallax }, uOpacity: { value: .4 }, uSoftField: { value: 1 },
-      uColorA: { value: new THREE.Color('#747b80') }, uColorB: { value: new THREE.Color('#f2f7fa') },
+      uColorA: { value: new THREE.Color('#ffffff') }, uColorB: { value: new THREE.Color('#ffffff') },
       uIntro: { value: reduced ? 1 : .32 },
     };
     const flowMaterial = new THREE.ShaderMaterial({ vertexShader: flowVertexShader, fragmentShader, uniforms: flowUniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -226,7 +226,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     nameGeometry.setAttribute('aSize', new THREE.BufferAttribute(target.sizes, 1));
     nameGeometry.setAttribute('aBrightness', new THREE.BufferAttribute(target.brightness, 1));
     nameGeometry.setAttribute('aTone', new THREE.BufferAttribute(tones(nameCount), 1));
-    const nameColorA = { value: new THREE.Color('#d7dde0') };
+    const nameColorA = { value: new THREE.Color('#ffffff') };
     const nameColorB = { value: new THREE.Color('#ffffff') };
     const nameMaterial = new THREE.ShaderMaterial({
       vertexShader: nameVertexShader, fragmentShader,
