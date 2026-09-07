@@ -40,12 +40,12 @@ void main() {
   float magneticPocket = sin(baseX * 5.2 + uTime * .23) * sin(aPhase * 2.3 - uTime * .11) * .035;
   float bandY = position.y * envelope + (slowDrift + filament + turbulence + magneticPocket) * envelope;
   float fieldY = position.y * 1.04 + slowDrift * 1.8 + filament * .55 + turbulence;
-  float gravity = smoothstep(.54, .96, aCapture);
-  float y = mix(fieldY, bandY, gravity * .86);
+  float gravity = smoothstep(.49, .94, aCapture);
+  float y = mix(fieldY, bandY, gravity * .91);
   float x = baseX + sin(position.y * 9. + aPhase + uTime * .13) * .009;
 
   float center = exp(-baseX * baseX * 7.);
-  y *= 1. - center * gravity * .28;
+  y *= 1. - center * gravity * .34;
   float side = mix(-1., 1., step(0., position.y + sin(aPhase) * .08));
   float deflect = step(.72, aCapture);
   float orbitEdge = .35 * (1. + sin(aPhase * 3.7 + uTime * .08) * .05);
@@ -174,7 +174,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       const subtleVerticalFeather = Math.random() < .1 ? 1 + Math.random() * .15 : 1;
       flowSeed[k + 1] = originalLane * subtleVerticalFeather;
       flowSeed[k + 2] = Math.random() - .5;
-      flowSize[i] = .48 + Math.random() * 1.38;
+      flowSize[i] = .52 + Math.random() * 1.48;
       flowBrightness[i] = .12 + Math.pow(Math.random(), .7) * .68;
       flowSpeed[i] = .018 + Math.random() * .032;
       flowPhase[i] = Math.random() * Math.PI * 2;
