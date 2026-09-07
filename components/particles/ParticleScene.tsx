@@ -12,6 +12,8 @@ attribute float aPhase;
 attribute float aDirection;
 attribute float aCapture;
 attribute float aTone;
+attribute float aFilament;
+attribute float aStrand;
 uniform float uTime;
 uniform float uPixelRatio;
 uniform float uAspect;
@@ -44,6 +46,17 @@ void main() {
   float y = mix(fieldY, bandY, gravity * .91);
   float x = baseX + sin(position.y * 9. + aPhase + uTime * .13) * .009;
 
+  // A small population gathers into breathing, curved filaments. Their paths
+  // weave at mismatched frequencies so they never resolve into rigid lines.
+  float strandOffset = (fract(aStrand * .6180339) - .5) * 1.32;
+  float strandCurve = strandOffset * (.55 + abs(baseX) * .16);
+  strandCurve += sin(baseX * 2.35 + aStrand * 1.37 + uTime * .11) * .115;
+  strandCurve += sin(baseX * 6.7 - uTime * .18 + aStrand * .73) * .038;
+  float strandBreath = .018 + (.5 + .5 * sin(baseX * 3.8 + uTime * .14 + aStrand)) * .026;
+  float strandY = strandCurve + position.y * strandBreath + magneticPocket * .22;
+  float strandBlend = aFilament * (.78 + .13 * sin(uTime * .16 + aStrand * 2.1 + baseX * .52));
+  y = mix(y, strandY, strandBlend);
+
   float center = exp(-baseX * baseX * 7.);
   y *= 1. - center * gravity * .68;
   float side = mix(-1., 1., step(0., position.y + sin(aPhase) * .08));
@@ -72,7 +85,7 @@ void main() {
   gl_PointSize = aSize * uPixelRatio * mix(2.05, .9, depth) * mix(1.42, 1.02, vReveal);
   float rareHighlight = smoothstep(.965, .998, aTone);
   float fieldSoftness = mix(.48, 1., gravity);
-  vBrightness = aBrightness * mix(.2, 1., depth) * (1. + rareHighlight * 1.45) * mix(.32, 1., uIntro) * fieldSoftness;
+  vBrightness = aBrightness * mix(.2, 1., depth) * (1. + rareHighlight * 1.45) * mix(.32, 1., uIntro) * fieldSoftness * (1. + aFilament * .18);
   vColor = mix(uColorA, uColorB, aTone);
   float radial = length(vec2(p.x * uAspect, p.y));
   float inside = 1. - step(.255, radial);
@@ -167,6 +180,8 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     const flowPhase = new Float32Array(flowCount);
     const flowDirection = new Float32Array(flowCount);
     const flowCapture = new Float32Array(flowCount);
+    const flowFilament = new Float32Array(flowCount);
+    const flowStrand = new Float32Array(flowCount);
     for (let i = 0; i < flowCount; i++) {
       const k = i * 3;
       flowSeed[k] = Math.random();
@@ -180,6 +195,8 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       flowPhase[i] = Math.random() * Math.PI * 2;
       flowDirection[i] = Math.random() < .5 ? -1 : 1;
       flowCapture[i] = Math.random();
+      flowFilament[i] = Math.random() < .16 ? 1 : 0;
+      flowStrand[i] = Math.floor(Math.random() * 10);
     }
     const flowGeometry = new THREE.BufferGeometry();
     flowGeometry.setAttribute('position', new THREE.BufferAttribute(flowSeed, 3));
@@ -190,6 +207,8 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     flowGeometry.setAttribute('aDirection', new THREE.BufferAttribute(flowDirection, 1));
     flowGeometry.setAttribute('aCapture', new THREE.BufferAttribute(flowCapture, 1));
     flowGeometry.setAttribute('aTone', new THREE.BufferAttribute(tones(flowCount), 1));
+    flowGeometry.setAttribute('aFilament', new THREE.BufferAttribute(flowFilament, 1));
+    flowGeometry.setAttribute('aStrand', new THREE.BufferAttribute(flowStrand, 1));
     const flowUniforms = {
       uTime: { value: 0 }, uPixelRatio: { value: pixelRatio }, uAspect: { value: aspect },
       uPointer: { value: pointer }, uParallax: { value: parallax }, uOpacity: { value: .4 }, uSoftField: { value: 1 },
