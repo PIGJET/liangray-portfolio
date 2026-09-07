@@ -21,6 +21,7 @@ uniform vec2 uPointer;
 uniform vec2 uParallax;
 uniform vec3 uColorA;
 uniform vec3 uColorB;
+uniform vec3 uAccent;
 uniform float uIntro;
 varying float vBrightness;
 varying float vReveal;
@@ -86,7 +87,9 @@ void main() {
   float rareHighlight = smoothstep(.965, .998, aTone);
   float fieldSoftness = mix(.48, 1., gravity);
   vBrightness = aBrightness * mix(.2, 1., depth) * (1. + rareHighlight * 1.45) * mix(.32, 1., uIntro) * fieldSoftness * (1. + aFilament * .18);
-  vColor = mix(uColorA, uColorB, aTone);
+  float colorSeed = smoothstep(.93, .995, aTone);
+  float accentInfluence = colorSeed * clamp(center * .72 + vReveal * .46, 0., 1.);
+  vColor = mix(mix(uColorA, uColorB, aTone), uAccent, accentInfluence * .68);
   float radial = length(vec2(p.x * uAspect, p.y));
   float inside = 1. - step(.255, radial);
   float capturedVisibility = step(.84, aCapture) * (.18 + .82 * smoothstep(.012, .255, radial));
@@ -120,14 +123,17 @@ const fragmentShader = `
 precision highp float;
 uniform float uOpacity;
 uniform float uSoftField;
+uniform float uCrispness;
 varying float vBrightness;
 varying float vReveal;
 varying float vVisibility;
 varying vec3 vColor;
 void main() {
   float d = length(gl_PointCoord - .5);
-  float core = 1. - smoothstep(.035, mix(.29, .15, vReveal), d);
-  float haze = (1. - smoothstep(.08, .5, d)) * mix(.66, .18, vReveal);
+  float coreStart = mix(.035, .026, uCrispness);
+  float coreEnd = mix(mix(.29, .15, vReveal), mix(.225, .13, vReveal), uCrispness);
+  float core = 1. - smoothstep(coreStart, coreEnd, d);
+  float haze = (1. - smoothstep(.08, .5, d)) * mix(.66, .18, vReveal) * mix(1., .45, uCrispness);
   float alpha = (core * mix(.16, 1., vReveal) + haze * uSoftField) * vBrightness * uOpacity * vVisibility;
   if (alpha < .008) discard;
   gl_FragColor = vec4(vColor, alpha);
@@ -211,8 +217,9 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     flowGeometry.setAttribute('aStrand', new THREE.BufferAttribute(flowStrand, 1));
     const flowUniforms = {
       uTime: { value: 0 }, uPixelRatio: { value: pixelRatio }, uAspect: { value: aspect },
-      uPointer: { value: pointer }, uParallax: { value: parallax }, uOpacity: { value: .4 }, uSoftField: { value: 1 },
+      uPointer: { value: pointer }, uParallax: { value: parallax }, uOpacity: { value: .4 }, uSoftField: { value: 1 }, uCrispness: { value: .72 },
       uColorA: { value: new THREE.Color('#ffffff') }, uColorB: { value: new THREE.Color('#ffffff') },
+      uAccent: { value: new THREE.Color('#79b7ff') },
       uIntro: { value: reduced ? 1 : .32 },
     };
     const flowMaterial = new THREE.ShaderMaterial({ vertexShader: flowVertexShader, fragmentShader, uniforms: flowUniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -249,7 +256,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     const nameColorB = { value: new THREE.Color('#ffffff') };
     const nameMaterial = new THREE.ShaderMaterial({
       vertexShader: nameVertexShader, fragmentShader,
-      uniforms: { uPixelRatio: { value: pixelRatio }, uParallax: { value: parallax }, uOpacity: { value: .96 }, uSoftField: { value: .3 }, uColorA: nameColorA, uColorB: nameColorB },
+      uniforms: { uPixelRatio: { value: pixelRatio }, uParallax: { value: parallax }, uOpacity: { value: .96 }, uSoftField: { value: .3 }, uCrispness: { value: 0 }, uColorA: nameColorA, uColorB: nameColorB },
       transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     const namePoints = new THREE.Points(nameGeometry, nameMaterial);
