@@ -27,7 +27,7 @@ void main() {
   float progress = fract(position.x + uTime * aSpeed);
   float directed = mix(1. - progress, progress, step(0., aDirection));
   float baseX = mix(-1.42, 1.42, directed);
-  float widthNoise = 1. + sin(aPhase * 2.7 + uTime * .08) * .1 + sin(baseX * 4.1 + aPhase) * .055;
+  float widthNoise = 1. + sin(aPhase * 2.7 + uTime * .08) * .025;
   float envelope = (.018 + pow(max(0., sin(3.14159265 * progress)), 1.08) * .57) * widthNoise;
 
   // Several weak, mismatched fields keep the silhouette organic instead of geometric.
@@ -41,12 +41,8 @@ void main() {
   float center = exp(-baseX * baseX * 7.);
   float side = mix(-1., 1., step(0., position.y + sin(aPhase) * .08));
   float deflect = step(aCapture, .63);
-  float orbitFalloff = exp(-pow(abs(y) / .34, 2.));
-  float orbitVariation = .19 + sin(aPhase * 3.7 + uTime * .12) * .055;
-  y += side * orbitVariation * orbitFalloff * center * deflect;
-  // Vertical-only diffusion breaks any shared upper/lower contour while the
-  // entrance and exit positions remain tightly aligned horizontally.
-  y += sin(aPhase * 5.3 + baseX * 2.2 - uTime * .09) * abs(position.y) * .028;
+  float orbitEdge = .35 * (1. + sin(aPhase * 3.7 + uTime * .08) * .05);
+  y += side * (orbitEdge - min(orbitEdge, abs(y))) * center * deflect;
 
   // A changing subset is weakly captured, spirals inward, and later exits.
   if (aCapture > .63 && abs(baseX) < .52) {
@@ -67,8 +63,7 @@ void main() {
 
   gl_Position = vec4(p, 0., 1.);
   gl_PointSize = aSize * uPixelRatio * mix(1.55, 1.08, vReveal);
-  // Gaussian lane seeds have no shared outer edge; distant wisps dissolve gently.
-  vBrightness = aBrightness * (.16 + .84 * exp(-abs(position.y) * .82));
+  vBrightness = aBrightness * (.9 + .1 * exp(-abs(position.y) * .8));
   vColor = mix(uColorA, uColorB, aTone);
 }`;
 
@@ -187,14 +182,12 @@ export default function ParticleScene({ entered, text, palette }: { entered: boo
     for (let i = 0; i < flowCount; i++) {
       const k = i * 3;
       flowSeed[k] = Math.random();
-      const gaussianU = Math.max(.000001, Math.random());
-      const gaussianV = Math.random();
-      const gaussianLane = Math.sqrt(-2 * Math.log(gaussianU)) * Math.cos(Math.PI * 2 * gaussianV);
-      const outerWisp = Math.random() < .16 ? 1.35 + Math.random() * 1.8 : 1;
-      flowSeed[k + 1] = gaussianLane * .46 * outerWisp;
+      const originalLane = (Math.random() + Math.random() + Math.random() + Math.random() - 2) * .5;
+      const subtleVerticalFeather = Math.random() < .1 ? 1 + Math.random() * .15 : 1;
+      flowSeed[k + 1] = originalLane * subtleVerticalFeather;
       flowSeed[k + 2] = Math.random() - .5;
       flowSize[i] = .48 + Math.random() * 1.38;
-      flowBrightness[i] = .1 + Math.pow(Math.random(), .72) * .7;
+      flowBrightness[i] = .12 + Math.pow(Math.random(), .7) * .68;
       flowSpeed[i] = .018 + Math.random() * .032;
       flowPhase[i] = Math.random() * Math.PI * 2;
       flowDirection[i] = Math.random() < .5 ? -1 : 1;
