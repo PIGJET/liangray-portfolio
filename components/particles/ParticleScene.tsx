@@ -41,7 +41,12 @@ void main() {
   float center = exp(-baseX * baseX * 7.);
   float side = mix(-1., 1., step(0., position.y + sin(aPhase) * .08));
   float deflect = step(aCapture, .63);
-  y += side * (.35 - min(.35, abs(y))) * center * deflect;
+  float orbitFalloff = exp(-pow(abs(y) / .34, 2.));
+  float orbitVariation = .19 + sin(aPhase * 3.7 + uTime * .12) * .055;
+  y += side * orbitVariation * orbitFalloff * center * deflect;
+  // Vertical-only diffusion breaks any shared upper/lower contour while the
+  // entrance and exit positions remain tightly aligned horizontally.
+  y += sin(aPhase * 5.3 + baseX * 2.2 - uTime * .09) * abs(position.y) * .028;
 
   // A changing subset is weakly captured, spirals inward, and later exits.
   if (aCapture > .63 && abs(baseX) < .52) {
@@ -63,7 +68,7 @@ void main() {
   gl_Position = vec4(p, 0., 1.);
   gl_PointSize = aSize * uPixelRatio * mix(1.55, 1.08, vReveal);
   // Gaussian lane seeds have no shared outer edge; distant wisps dissolve gently.
-  vBrightness = aBrightness * (.28 + .72 * exp(-abs(position.y) * .62));
+  vBrightness = aBrightness * (.16 + .84 * exp(-abs(position.y) * .82));
   vColor = mix(uColorA, uColorB, aTone);
 }`;
 
@@ -185,7 +190,7 @@ export default function ParticleScene({ entered, text, palette }: { entered: boo
       const gaussianU = Math.max(.000001, Math.random());
       const gaussianV = Math.random();
       const gaussianLane = Math.sqrt(-2 * Math.log(gaussianU)) * Math.cos(Math.PI * 2 * gaussianV);
-      const outerWisp = Math.random() < .075 ? 1.5 + Math.random() * 1.45 : 1;
+      const outerWisp = Math.random() < .16 ? 1.35 + Math.random() * 1.8 : 1;
       flowSeed[k + 1] = gaussianLane * .46 * outerWisp;
       flowSeed[k + 2] = Math.random() - .5;
       flowSize[i] = .48 + Math.random() * 1.38;
