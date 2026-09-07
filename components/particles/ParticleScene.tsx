@@ -84,8 +84,8 @@ void main() {
   gl_Position = vec4(p, 0., 1.);
   gl_PointSize = aSize * uPixelRatio * mix(2.05, .9, depth) * mix(1.42, 1.02, vReveal);
   float rareHighlight = smoothstep(.965, .998, aTone);
-  float fieldSoftness = mix(.34, 1., gravity);
-  vBrightness = aBrightness * mix(.2, 1., depth) * (1. + rareHighlight * 1.45) * mix(.32, 1., uIntro) * fieldSoftness * (1. + aFilament * .34);
+  float fieldSoftness = mix(.48, 1., gravity);
+  vBrightness = aBrightness * mix(.2, 1., depth) * (1. + rareHighlight * 1.45) * mix(.32, 1., uIntro) * fieldSoftness * (1. + aFilament * .18);
   vColor = mix(uColorA, uColorB, aTone);
   float radial = length(vec2(p.x * uAspect, p.y));
   float inside = 1. - step(.255, radial);
@@ -120,17 +120,14 @@ const fragmentShader = `
 precision highp float;
 uniform float uOpacity;
 uniform float uSoftField;
-uniform float uStretch;
 varying float vBrightness;
 varying float vReveal;
 varying float vVisibility;
 varying vec3 vColor;
 void main() {
-  vec2 shape = gl_PointCoord - .5;
-  shape.x *= mix(1., .72, uStretch * (1. - vReveal));
-  float d = length(shape);
-  float core = 1. - smoothstep(.025, mix(.25, .12, vReveal), d);
-  float haze = (1. - smoothstep(.08, .5, d)) * mix(.42, .12, vReveal);
+  float d = length(gl_PointCoord - .5);
+  float core = 1. - smoothstep(.035, mix(.29, .15, vReveal), d);
+  float haze = (1. - smoothstep(.08, .5, d)) * mix(.66, .18, vReveal);
   float alpha = (core * mix(.16, 1., vReveal) + haze * uSoftField) * vBrightness * uOpacity * vVisibility;
   if (alpha < .008) discard;
   gl_FragColor = vec4(vColor, alpha);
@@ -157,7 +154,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory || 4;
     const highPower = !mobile && cores >= 8 && memory >= 8;
     const flowCount = mobile ? (cores >= 8 ? 90000 : 65000) : (highPower ? 300000 : 200000);
-    const nameCount = mobile ? 17000 : 42000;
+    const nameCount = mobile ? 14000 : 34000;
     const pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 1.3);
     let aspect = Math.max(1, el.clientWidth / el.clientHeight);
 
@@ -192,8 +189,8 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       const subtleVerticalFeather = Math.random() < .1 ? 1 + Math.random() * .15 : 1;
       flowSeed[k + 1] = originalLane * subtleVerticalFeather;
       flowSeed[k + 2] = Math.random() - .5;
-      flowSize[i] = .62 + Math.pow(Math.random(), 2.) * 2.45;
-      flowBrightness[i] = .09 + Math.pow(Math.random(), 1.15) * .8;
+      flowSize[i] = .6006 + Math.random() * 1.7094;
+      flowBrightness[i] = .12 + Math.pow(Math.random(), .7) * .68;
       flowSpeed[i] = .018 + Math.random() * .032;
       flowPhase[i] = Math.random() * Math.PI * 2;
       flowDirection[i] = Math.random() < .5 ? -1 : 1;
@@ -214,7 +211,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     flowGeometry.setAttribute('aStrand', new THREE.BufferAttribute(flowStrand, 1));
     const flowUniforms = {
       uTime: { value: 0 }, uPixelRatio: { value: pixelRatio }, uAspect: { value: aspect },
-      uPointer: { value: pointer }, uParallax: { value: parallax }, uOpacity: { value: .4 }, uSoftField: { value: 1 }, uStretch: { value: .42 },
+      uPointer: { value: pointer }, uParallax: { value: parallax }, uOpacity: { value: .4 }, uSoftField: { value: 1 },
       uColorA: { value: new THREE.Color('#ffffff') }, uColorB: { value: new THREE.Color('#ffffff') },
       uIntro: { value: reduced ? 1 : .32 },
     };
@@ -252,7 +249,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     const nameColorB = { value: new THREE.Color('#ffffff') };
     const nameMaterial = new THREE.ShaderMaterial({
       vertexShader: nameVertexShader, fragmentShader,
-      uniforms: { uPixelRatio: { value: pixelRatio }, uParallax: { value: parallax }, uOpacity: { value: 1 }, uSoftField: { value: .16 }, uStretch: { value: 0 }, uColorA: nameColorA, uColorB: nameColorB },
+      uniforms: { uPixelRatio: { value: pixelRatio }, uParallax: { value: parallax }, uOpacity: { value: .96 }, uSoftField: { value: .3 }, uColorA: nameColorA, uColorB: nameColorB },
       transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     const namePoints = new THREE.Points(nameGeometry, nameMaterial);
@@ -304,7 +301,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
           const d2 = dx * dx + dy * dy;
           if (d2 < mouseRadius2) {
             const d = Math.sqrt(d2) + .0001;
-            const force = Math.pow(1 - d / mouseRadius, 2) * .0075 * dt;
+            const force = Math.pow(1 - d / mouseRadius, 2) * .012 * dt;
             vx += dx / d * force / aspect - dy / d * force * .18;
             vy += dy / d * force + dx / d * force * .18;
           }
@@ -339,5 +336,5 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
     };
   }, [text]);
 
-  return <div ref={mount} className="eclipse-canvas particle-canvas"><span className="particle-name-foundation" aria-hidden="true">{text}</span><noscript><p className="canvas-fallback">LIANGRAY LI</p></noscript></div>;
+  return <div ref={mount} className="eclipse-canvas particle-canvas"><noscript><p className="canvas-fallback">LIANGRAY LI</p></noscript></div>;
 }
