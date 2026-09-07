@@ -27,7 +27,8 @@ void main() {
   float progress = fract(position.x + uTime * aSpeed);
   float directed = mix(1. - progress, progress, step(0., aDirection));
   float baseX = mix(-1.42, 1.42, directed);
-  float envelope = .018 + pow(max(0., sin(3.14159265 * progress)), 1.08) * .57;
+  float widthNoise = 1. + sin(aPhase * 2.7 + uTime * .08) * .1 + sin(baseX * 4.1 + aPhase) * .055;
+  float envelope = (.018 + pow(max(0., sin(3.14159265 * progress)), 1.08) * .57) * widthNoise;
 
   // Several weak, mismatched fields keep the silhouette organic instead of geometric.
   float slowDrift = sin(baseX * 3.1 + uTime * .19 + aPhase) * .018;
@@ -61,7 +62,8 @@ void main() {
 
   gl_Position = vec4(p, 0., 1.);
   gl_PointSize = aSize * uPixelRatio * mix(1.55, 1.08, vReveal);
-  vBrightness = aBrightness;
+  // Gaussian lane seeds have no shared outer edge; distant wisps dissolve gently.
+  vBrightness = aBrightness * (.28 + .72 * exp(-abs(position.y) * .62));
   vColor = mix(uColorA, uColorB, aTone);
 }`;
 
@@ -180,10 +182,14 @@ export default function ParticleScene({ entered, text, palette }: { entered: boo
     for (let i = 0; i < flowCount; i++) {
       const k = i * 3;
       flowSeed[k] = Math.random();
-      flowSeed[k + 1] = (Math.random() + Math.random() + Math.random() + Math.random() - 2) * .5;
+      const gaussianU = Math.max(.000001, Math.random());
+      const gaussianV = Math.random();
+      const gaussianLane = Math.sqrt(-2 * Math.log(gaussianU)) * Math.cos(Math.PI * 2 * gaussianV);
+      const outerWisp = Math.random() < .075 ? 1.5 + Math.random() * 1.45 : 1;
+      flowSeed[k + 1] = gaussianLane * .46 * outerWisp;
       flowSeed[k + 2] = Math.random() - .5;
       flowSize[i] = .48 + Math.random() * 1.38;
-      flowBrightness[i] = .12 + Math.pow(Math.random(), .7) * .68;
+      flowBrightness[i] = .1 + Math.pow(Math.random(), .72) * .7;
       flowSpeed[i] = .018 + Math.random() * .032;
       flowPhase[i] = Math.random() * Math.PI * 2;
       flowDirection[i] = Math.random() < .5 ? -1 : 1;
