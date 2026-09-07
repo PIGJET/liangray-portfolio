@@ -45,7 +45,7 @@ void main() {
   float x = baseX + sin(position.y * 9. + aPhase + uTime * .13) * .009;
 
   float center = exp(-baseX * baseX * 7.);
-  y *= 1. - center * gravity * .34;
+  y *= 1. - center * gravity * .544;
   float side = mix(-1., 1., step(0., position.y + sin(aPhase) * .08));
   float deflect = step(.72, aCapture);
   float orbitEdge = .35 * (1. + sin(aPhase * 3.7 + uTime * .08) * .05);
@@ -174,7 +174,7 @@ export default function ParticleScene({ entered, text }: { entered: boolean; tex
       const subtleVerticalFeather = Math.random() < .1 ? 1 + Math.random() * .15 : 1;
       flowSeed[k + 1] = originalLane * subtleVerticalFeather;
       flowSeed[k + 2] = Math.random() - .5;
-      flowSize[i] = .52 + Math.random() * 1.48;
+      flowSize[i] = .546 + Math.random() * 1.554;
       flowBrightness[i] = .12 + Math.pow(Math.random(), .7) * .68;
       flowSpeed[i] = .018 + Math.random() * .032;
       flowPhase[i] = Math.random() * Math.PI * 2;
