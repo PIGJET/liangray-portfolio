@@ -19,12 +19,16 @@ uniform vec2 uPointer;
 uniform vec2 uParallax;
 uniform vec3 uColorA;
 uniform vec3 uColorB;
+uniform vec3 uAccent;
+uniform float uIntro;
 varying float vBrightness;
 varying float vReveal;
+varying float vVisibility;
 varying vec3 vColor;
 
 void main() {
-  float progress = fract(position.x + uTime * aSpeed);
+  float depth = position.z + .5;
+  float progress = fract(position.x + uTime * aSpeed * mix(.58, 1.25, depth));
   float directed = mix(1. - progress, progress, step(0., aDirection));
   float baseX = mix(-1.42, 1.42, directed);
   float widthNoise = 1. + sin(aPhase * 2.7 + uTime * .08) * .025;
@@ -62,9 +66,15 @@ void main() {
   p += vec2(-delta.y / uAspect, delta.x) * push * .16;
 
   gl_Position = vec4(p, 0., 1.);
-  gl_PointSize = aSize * uPixelRatio * mix(1.55, 1.08, vReveal);
-  vBrightness = aBrightness * (.9 + .1 * exp(-abs(position.y) * .8));
-  vColor = mix(uColorA, uColorB, aTone);
+  gl_PointSize = aSize * uPixelRatio * mix(2.05, .9, depth) * mix(1.42, 1.02, vReveal);
+  float rareHighlight = smoothstep(.965, .998, aTone);
+  vBrightness = aBrightness * mix(.2, 1., depth) * (1. + rareHighlight * 1.7) * mix(.32, 1., uIntro) * (.9 + .1 * exp(-abs(position.y) * .8));
+  float icyLensing = center * (.2 + .8 * step(.63, aCapture)) * (.35 + .65 * depth);
+  vColor = mix(mix(uColorA, uColorB, aTone), uAccent, icyLensing * .72);
+  float radial = length(vec2(p.x * uAspect, p.y));
+  float inside = 1. - step(.255, radial);
+  float capturedVisibility = step(.63, aCapture) * (.18 + .82 * smoothstep(.012, .255, radial));
+  vVisibility = mix(1., capturedVisibility, inside);
 }`;
 
 const nameVertexShader = `
@@ -77,6 +87,7 @@ uniform vec3 uColorA;
 uniform vec3 uColorB;
 varying float vBrightness;
 varying float vReveal;
+varying float vVisibility;
 varying vec3 vColor;
 void main() {
   vec3 p = position;
@@ -85,6 +96,7 @@ void main() {
   gl_PointSize = aSize * uPixelRatio * (1. + p.z * .2);
   vBrightness = aBrightness;
   vReveal = 1.;
+  vVisibility = 1.;
   vColor = mix(uColorA, uColorB, aTone);
 }`;
 
@@ -94,14 +106,39 @@ uniform float uOpacity;
 uniform float uSoftField;
 varying float vBrightness;
 varying float vReveal;
+varying float vVisibility;
 varying vec3 vColor;
 void main() {
   float d = length(gl_PointCoord - .5);
   float core = 1. - smoothstep(.035, mix(.29, .15, vReveal), d);
   float haze = (1. - smoothstep(.08, .5, d)) * mix(.66, .18, vReveal);
-  float alpha = (core * mix(.16, 1., vReveal) + haze * uSoftField) * vBrightness * uOpacity;
+  float alpha = (core * mix(.16, 1., vReveal) + haze * uSoftField) * vBrightness * uOpacity * vVisibility;
   if (alpha < .008) discard;
   gl_FragColor = vec4(vColor, alpha);
+}`;
+
+const photonVertexShader = `
+varying vec2 vLocal;
+void main() {
+  vLocal = position.xy;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
+}`;
+
+const photonFragmentShader = `
+precision highp float;
+uniform float uTime;
+varying vec2 vLocal;
+void main() {
+  float radius = length(vLocal);
+  float angle = atan(vLocal.y, vLocal.x);
+  float fineEdge = exp(-pow((radius - .92) / .055, 2.));
+  float outerHaze = exp(-pow((radius - 1.01) / .14, 2.)) * .24;
+  float asymmetry = .28 + .72 * smoothstep(-.7, .9, sin(angle - .55 + sin(uTime * .08) * .13));
+  float texture = .78 + .22 * sin(angle * 5. - uTime * .17 + sin(angle * 2.) * 1.4);
+  float alpha = (fineEdge + outerHaze) * asymmetry * texture * .5;
+  vec3 pearl = vec3(.79, .84, .87);
+  vec3 ice = vec3(.38, .64, 1.);
+  gl_FragColor = vec4(mix(pearl, ice, asymmetry * .42), alpha);
 }`;
 
 function tones(count: number) {
@@ -110,37 +147,10 @@ function tones(count: number) {
   return values;
 }
 
-export type ParticlePalette = 'pearl' | 'ice' | 'violet' | 'aurora' | 'ember';
-
-const colorways: Record<ParticlePalette, { flow: [string, string]; name: [string, string] }> = {
-  pearl: { flow: ['#8c9396', '#f7fbff'], name: ['#cad0d2', '#ffffff'] },
-  ice: { flow: ['#296bff', '#b9f4ff'], name: ['#d8e5ff', '#ffffff'] },
-  violet: { flow: ['#6d35ff', '#f0a8ff'], name: ['#e4d5ff', '#fff7ff'] },
-  aurora: { flow: ['#16c7a4', '#77a8ff'], name: ['#c8fff1', '#eef5ff'] },
-  ember: { flow: ['#ff4f2b', '#ffd06b'], name: ['#ffe0bd', '#fffaf0'] },
-};
-
-type ColorUniforms = {
-  flowA: THREE.IUniform<THREE.Color>;
-  flowB: THREE.IUniform<THREE.Color>;
-  nameA: THREE.IUniform<THREE.Color>;
-  nameB: THREE.IUniform<THREE.Color>;
-};
-
-export default function ParticleScene({ entered, text, palette }: { entered: boolean; text: string; palette: ParticlePalette }) {
+export default function ParticleScene({ entered, text }: { entered: boolean; text: string }) {
   const mount = useRef<HTMLDivElement>(null);
   const enteredRef = useRef(entered);
-  const colorsRef = useRef<ColorUniforms | null>(null);
   useEffect(() => { enteredRef.current = entered; }, [entered]);
-  useEffect(() => {
-    const uniforms = colorsRef.current;
-    if (!uniforms) return;
-    const colors = colorways[palette];
-    uniforms.flowA.value.set(colors.flow[0]);
-    uniforms.flowB.value.set(colors.flow[1]);
-    uniforms.nameA.value.set(colors.name[0]);
-    uniforms.nameB.value.set(colors.name[1]);
-  }, [palette]);
 
   useEffect(() => {
     const el = mount.current;
@@ -168,7 +178,6 @@ export default function ParticleScene({ entered, text, palette }: { entered: boo
     const pointer = new THREE.Vector2(4, 4);
     const parallax = new THREE.Vector2();
     const neutral = new THREE.Vector2();
-    const initialColors = colorways[palette];
 
     // Static seeds are animated entirely in the vertex shader, allowing hundreds
     // of thousands of particles without a per-particle JavaScript update.
@@ -204,19 +213,27 @@ export default function ParticleScene({ entered, text, palette }: { entered: boo
     flowGeometry.setAttribute('aTone', new THREE.BufferAttribute(tones(flowCount), 1));
     const flowUniforms = {
       uTime: { value: 0 }, uPixelRatio: { value: pixelRatio }, uAspect: { value: aspect },
-      uPointer: { value: pointer }, uParallax: { value: parallax }, uOpacity: { value: .43 }, uSoftField: { value: 1 },
-      uColorA: { value: new THREE.Color(initialColors.flow[0]) }, uColorB: { value: new THREE.Color(initialColors.flow[1]) },
+      uPointer: { value: pointer }, uParallax: { value: parallax }, uOpacity: { value: .4 }, uSoftField: { value: 1 },
+      uColorA: { value: new THREE.Color('#747b80') }, uColorB: { value: new THREE.Color('#f2f7fa') },
+      uAccent: { value: new THREE.Color('#79aef8') }, uIntro: { value: reduced ? 1 : .32 },
     };
     const flowMaterial = new THREE.ShaderMaterial({ vertexShader: flowVertexShader, fragmentShader, uniforms: flowUniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
     const flowPoints = new THREE.Points(flowGeometry, flowMaterial);
-    flowPoints.renderOrder = 0;
+    flowPoints.renderOrder = 1;
     scene.add(flowPoints);
 
     const holeGeometry = new THREE.CircleGeometry(1, 96);
     const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x010102, depthTest: false, depthWrite: false });
     const hole = new THREE.Mesh(holeGeometry, holeMaterial);
-    hole.renderOrder = 1;
+    hole.renderOrder = 0;
     scene.add(hole);
+
+    const photonGeometry = new THREE.RingGeometry(.76, 1.2, 160, 1);
+    const photonUniforms = { uTime: { value: 0 } };
+    const photonMaterial = new THREE.ShaderMaterial({ vertexShader: photonVertexShader, fragmentShader: photonFragmentShader, uniforms: photonUniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
+    const photonRing = new THREE.Mesh(photonGeometry, photonMaterial);
+    photonRing.renderOrder = 2;
+    scene.add(photonRing);
 
     const target = generateParticleText(text, nameCount);
     const namePosition = new Float32Array(nameCount * 3);
@@ -237,26 +254,27 @@ export default function ParticleScene({ entered, text, palette }: { entered: boo
     nameGeometry.setAttribute('aSize', new THREE.BufferAttribute(target.sizes, 1));
     nameGeometry.setAttribute('aBrightness', new THREE.BufferAttribute(target.brightness, 1));
     nameGeometry.setAttribute('aTone', new THREE.BufferAttribute(tones(nameCount), 1));
-    const nameColorA = { value: new THREE.Color(initialColors.name[0]) };
-    const nameColorB = { value: new THREE.Color(initialColors.name[1]) };
+    const nameColorA = { value: new THREE.Color('#d7dde0') };
+    const nameColorB = { value: new THREE.Color('#ffffff') };
     const nameMaterial = new THREE.ShaderMaterial({
       vertexShader: nameVertexShader, fragmentShader,
       uniforms: { uPixelRatio: { value: pixelRatio }, uParallax: { value: parallax }, uOpacity: { value: .96 }, uSoftField: { value: .3 }, uColorA: nameColorA, uColorB: nameColorB },
       transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     const namePoints = new THREE.Points(nameGeometry, nameMaterial);
-    namePoints.renderOrder = 2;
+    namePoints.renderOrder = 3;
     scene.add(namePoints);
-    colorsRef.current = { flowA: flowUniforms.uColorA, flowB: flowUniforms.uColorB, nameA: nameColorA, nameB: nameColorB };
 
     let frame = 0;
     let last = performance.now();
     let visible = true;
+    let intro = reduced ? 1 : .32;
     const resize = () => {
       aspect = Math.max(1, el.clientWidth / el.clientHeight);
       renderer.setSize(el.clientWidth, el.clientHeight, false);
       flowUniforms.uAspect.value = aspect;
       hole.scale.set(.255 / aspect, .255, 1);
+      photonRing.scale.set(.29 / aspect, .29, 1);
     };
     const onPointer = (event: PointerEvent) => pointerTarget.set(event.clientX / innerWidth * 2 - 1, -(event.clientY / innerHeight * 2 - 1));
     const onLeave = () => pointerTarget.set(4, 4);
@@ -265,9 +283,12 @@ export default function ParticleScene({ entered, text, palette }: { entered: boo
     const render = (now: number) => {
       const dt = Math.min((now - last) / 16.67, 1.7);
       last = now;
-      pointer.lerp(pointerTarget, .1);
-      parallax.lerp(pointerTarget.length() < 2 ? pointer : neutral, .03);
+      pointer.lerp(pointerTarget, .06);
+      parallax.lerp(pointerTarget.length() < 2 ? pointer : neutral, .022);
       flowUniforms.uTime.value = reduced ? 0 : now * .001;
+      photonUniforms.uTime.value = reduced ? 0 : now * .001;
+      intro += ((enteredRef.current ? 1 : .32) - intro) * .026 * dt;
+      flowUniforms.uIntro.value = intro;
 
       const active = enteredRef.current || reduced;
       const mouseActive = !reduced && pointer.length() < 2;
@@ -320,8 +341,7 @@ export default function ParticleScene({ entered, text, palette }: { entered: boo
       removeEventListener('pointermove', onPointer);
       removeEventListener('pointerleave', onLeave);
       removeEventListener('scroll', onScroll);
-      flowGeometry.dispose(); flowMaterial.dispose(); holeGeometry.dispose(); holeMaterial.dispose(); nameGeometry.dispose(); nameMaterial.dispose();
-      colorsRef.current = null;
+      flowGeometry.dispose(); flowMaterial.dispose(); holeGeometry.dispose(); holeMaterial.dispose(); photonGeometry.dispose(); photonMaterial.dispose(); nameGeometry.dispose(); nameMaterial.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
     };
