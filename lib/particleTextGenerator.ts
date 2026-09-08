@@ -15,7 +15,8 @@ export function generateParticleText(text: string, count: number): ParticleTarge
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '300 172px Arial, Helvetica, sans-serif';
+  const siteFont = getComputedStyle(document.body).fontFamily;
+  ctx.font = `300 172px ${siteFont}`;
   ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
   const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -34,8 +35,10 @@ export function generateParticleText(text: string, count: number): ParticleTarge
     const sample = candidates[(Math.random() * candidates.length) | 0];
     const jitterX = (Math.random() - 0.5) * 2.2;
     const jitterY = (Math.random() - 0.5) * 2.2;
-    positions[i * 3] = ((sample[0] + jitterX) / canvas.width - 0.5) * 1.72;
-    positions[i * 3 + 1] = -((sample[1] + jitterY) / canvas.height - 0.5) * 0.52;
+    // Preserve the full particle count while compressing the wordmark by 15%,
+    // producing a smaller but denser and more legible particle silhouette.
+    positions[i * 3] = ((sample[0] + jitterX) / canvas.width - 0.5) * 1.462;
+    positions[i * 3 + 1] = -((sample[1] + jitterY) / canvas.height - 0.5) * 0.442;
     positions[i * 3 + 2] = (Math.random() - 0.5) * 0.7;
     brightness[i] = 0.28 + Math.random() * 0.72;
     sizes[i] = 0.72 + Math.random() * 1.75;
