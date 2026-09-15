@@ -35,12 +35,30 @@ npm install
 npm run dev
 ```
 
-Quality checks:
+The development server prints the local URL when it starts.
 
-```bash
-npm run lint
-npm run build
-```
+## Available commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the local development server with Vinext and Vite. |
+| `npm run build` | Create a production build. |
+| `npm run start` | Preview an existing production build locally with Wrangler. |
+| `npm run lint` | Check the codebase with Oxlint. |
+| `npm run format` | Format supported files with Oxfmt. |
+
+## Project structure
+
+- `app/page.tsx` contains the portfolio content and page sections.
+- `app/globals.css` defines the visual system, layout, and motion.
+- `components/particles/ParticleScene.tsx` renders the interactive hero experience.
+- `lib/particleTextGenerator.ts` converts the hero wordmark into particle targets.
+- `public/` contains the favicon and social preview image.
+- `.openai/hosting.json` and `vite.config.ts` configure the Sites and Cloudflare build runtime.
+
+## Deployment
+
+Production builds target Cloudflare through the Sites/Vinext toolchain. Run `npm run build` before deployment to catch type, bundling, and runtime configuration errors locally.
 
 ## Video walkthrough
 
