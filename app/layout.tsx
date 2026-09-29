@@ -13,6 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 const siteUrl = process.env.SITE_URL;
+const socialImage =
+  'https://raw.githubusercontent.com/PIGJET/liangray-portfolio/main/public/og.png';
 
 export const metadata: Metadata = {
   ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
@@ -21,13 +23,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Liangray Li — Creative Developer',
     description: 'Selected work and experiments by Liangray Li, a creative developer in Toronto.',
-    images: ['/og.png'],
+    images: [socialImage],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Liangray Li — Creative Developer',
     description: 'Selected work and experiments by Liangray Li, a creative developer in Toronto.',
-    images: ['/og.png'],
+    images: [socialImage],
   },
 };
 
