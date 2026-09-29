@@ -12,20 +12,24 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+const siteUrl = process.env.SITE_URL;
+const socialImage =
+  'https://raw.githubusercontent.com/PIGJET/liangray-portfolio/main/public/og.png';
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://liangray-li-portfolio.milky-robin-4084.chatgpt.site'),
+  ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
   title: 'Liangray Li — Creative Developer',
   description: 'Selected work and experiments by Liangray Li, a creative developer in Toronto.',
   openGraph: {
     title: 'Liangray Li — Creative Developer',
     description: 'Selected work and experiments by Liangray Li, a creative developer in Toronto.',
-    images: ['/og.png'],
+    images: [socialImage],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Liangray Li — Creative Developer',
     description: 'Selected work and experiments by Liangray Li, a creative developer in Toronto.',
-    images: ['/og.png'],
+    images: [socialImage],
   },
 };
 
