@@ -12,8 +12,10 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+const siteUrl = process.env.SITE_URL;
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://liangray-li-portfolio.milky-robin-4084.chatgpt.site'),
+  ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
   title: 'Liangray Li — Creative Developer',
   description: 'Selected work and experiments by Liangray Li, a creative developer in Toronto.',
   openGraph: {
