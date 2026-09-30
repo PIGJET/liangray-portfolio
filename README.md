@@ -58,4 +58,4 @@ The development server prints the local URL when it starts.
 
 ## Deployment
 
-Production builds target Cloudflare Workers. Run `npm run build` before deployment to catch type, bundling, and runtime configuration errors locally.
+Production builds target Cloudflare Workers. Set `NEXT_PUBLIC_SITE_URL` to your final public origin before building so social preview links use the correct address. Run `npm run build` before deployment to catch type, bundling, and runtime configuration errors locally.
